@@ -1,0 +1,183 @@
+<script>
+//set your damaged key here
+cdKey = 'AAA?-BBB?-CCC?';
+
+//Class creator tool from http://www.htmlgoodies.com/html5/tutorials/create-an-object-oriented-javascript-class-constructor.html
+Class = function(methods)
+	{   
+    var klass = function() { this.initialize.apply( this, arguments ); };  
+    for (var property in methods) { klass.prototype[property] = methods[property]; }
+    if (!klass.prototype.initialize) klass.prototype.initialize = function(){};      
+    return klass;    
+	};	
+
+//generate a combination of serial ID possible
+SerialGenerator = Class(
+	{
+	/************/
+	/* Constant */
+	/************/
+	//list of windows key valid char
+	arrChar			: [ '2' , '3' , '4' , '5' , '6' , '7', '8' , '9' , 'B' , 'C' , 'D' , 'F' , 'G' , 'H' , 'J' , 'K' , 'M' , 'P' , 'Q' , 'R' , 'T' , 'V' , 'W' , 'X' , 'Y' ],
+	//Tested key pattern
+	partialKey		: [],
+	//Key pattern delimiter
+	delimiter		: '?',
+	//Displayed new line
+	newLine			: '<br/>',
+	/********/
+	/* Vars */
+	/********/
+	keyList			: [],		//list of keys generated
+	securityLoop	: 0,		//current loop (current nb of keys)
+	maxLoop			: 1000000,	//max loop (nb of keys)
+	stillArr		: true,		//still keys to generate
+	doMessage		: false,	//called by worker
+	
+	//Main call
+	init : function(key , arrChar , doMessage )
+		{
+		//Init parameters
+		this.partialKey = key;
+		if( arrChar ) this.arrChar		= arrChar;
+		if( doMessage ) this.doMessage	= doMessage; 
+		},
+	
+	//Function setting keys in array
+	setKeyList : function()
+		{
+		var i=j=k=pC=oC = 0,
+			currLine	= [],
+			currLen 	= [],
+			x			= [],
+			arrLen		= this.arrChar.length,
+			tabPK		= this.partialKey.split( this.delimiter ),
+			tabPKLen	= tabPK.length,
+			total		= Math.pow(arrLen,(tabPKLen-1));
+	
+		//limit total if more than maxLoop
+		if( total > this.maxLoop ) total = this.maxLoop;
+	
+		//Send number of possibilities for max progress bar
+		//removed cause too much call when big amount
+		//if( this.doMessage ) postMessage({ action : 'max' , max : total });
+			
+		//construct the array with all possibilities
+		for ( i=0 ; i < tabPKLen ; i++ )
+			{
+			currLine[i] = [];
+			//init array using to read array
+			x[i] = 0;
+			
+			//looping key part possibilities
+			for ( j=0 ; j < arrLen ; j++ )
+				{
+				//if last element need to add arrChar cause it is last key letter
+				if( i != tabPKLen-1 )
+					currLine[i][j] = tabPK[i] + this.arrChar[j];
+				else
+					currLine[i][j] = tabPK[i];	
+				}
+				
+			//store array length to prevent multiple .length call in loop
+			currLen[i] = currLine[i].length;
+			}
+
+		//rearrange the array to display all combination
+		var tmp=0;
+		while( this.stillArr )
+			{
+			//Security to prevent infinit loop & limit result
+			this.securityLoop++;
+			if( this.securityLoop > this.maxLoop )
+				{
+				if( this.doMessage ) postMessage({ action : 'maxLoop' });	
+				break;
+				}	
+			//init current key list content
+			this.keyList[k] = '';
+			//Display final keys part
+			for ( i=0 ; i<tabPKLen ; i++ ) this.keyList[k] += currLine[i][x[i]];
+			//increment keylist array
+			k++;
+			//update progress bar
+			if( this.doMessage )
+				{
+				//Sending message only each % reached
+				pC = k*100/total;
+				if( parseInt(pC) > parseInt(oC) )
+					{
+					postMessage({ action : 'progress' , progress : pC });
+					oC = pC;
+					}
+				//Used only for full progress, but this make too much call
+				//postMessage({ action : 'progress' , progress : k });
+				}
+			//do incrementation of x array
+			x=this.checkPosition( x , currLen , 0 );
+			}
+
+		},
+
+	//function incrementing current array position
+	checkPosition : function( x , currLen , id )
+		{
+		//Exit if id asked is out of range
+		if( id < x.length-1 )
+			{
+			//increment current state
+			x[id]++;
+			//test if value is out of range
+			if( x[id] > currLen[id]-1 )
+				{
+				//set to 0 if out of range
+				x[id] = 0;
+				//check next level
+				x = this.checkPosition( x , currLen , id+1 );
+				}
+			}
+		else{
+			//set var to exit cause all tab position are done
+			this.stillArr = false;
+			}
+		return x;
+		},
+	
+	//Function get keys
+	getKeyList : function()
+		{
+		return this.keyList;
+		},
+	
+	//Function displaying keys
+	displayKeyList : function()
+		{		
+		document.write( this.keyList.join( this.newLine ) );
+		},
+		
+	//Function displaying keys
+	postKeyList : function()
+		{		
+		postMessage({ action : 'keyList' , keyList : this.keyList });
+		}
+		
+	});
+
+/*
+// => Call from Web Worker	
+//When message is received, start script !
+onmessage = function(e)
+	{
+	var sGen = new SerialGenerator();	
+	sGen.init( e.data.id , e.data.chr , true );
+	sGen.setKeyList();
+	sGen.postKeyList();
+	};
+*/
+
+//Stand alone script
+var sGen = new SerialGenerator();	
+sGen.init( cdKey );
+sGen.setKeyList();
+sGen.displayKeyList();
+</script>
